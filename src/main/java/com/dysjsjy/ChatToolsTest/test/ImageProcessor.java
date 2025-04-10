@@ -1,4 +1,4 @@
-package com.dysjsjy.QwenTest.test;
+package com.dysjsjy.ChatToolsTest.test;
 
 import java.io.*;
 import java.net.HttpURLConnection;

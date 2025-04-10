@@ -1,4 +1,4 @@
-package com.dysjsjy.QwenTest.test;
+package com.dysjsjy.ChatToolsTest.test;
 
 import java.io.IOException;
 import java.util.Scanner;

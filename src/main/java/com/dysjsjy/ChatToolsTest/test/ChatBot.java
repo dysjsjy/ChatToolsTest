@@ -1,4 +1,4 @@
-package com.dysjsjy.QwenTest.test;
+package com.dysjsjy.ChatToolsTest.test;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
