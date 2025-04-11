@@ -178,3 +178,4 @@ Thumbs.db
 
 # data
 data/db/config.properties
+data/history/

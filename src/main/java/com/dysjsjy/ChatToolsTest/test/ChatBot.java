@@ -1,6 +1,8 @@
 package com.dysjsjy.ChatToolsTest.test;
 
 import com.dysjsjy.ChatToolsTest.test.LLMConfig.LLMPropertiesConfigManager;
+import com.dysjsjy.ChatToolsTest.test.db.ConversationHistoryStorage;
+import com.dysjsjy.ChatToolsTest.test.db.FileConversationStorage;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
@@ -19,12 +21,37 @@ public class ChatBot {
     private final List<ChatMessage> conversationHistory;
     private final Gson gson;
     private String currentProviderPrefix;
+    private final ConversationHistoryStorage historyStorage;
+    private final String sessionId;
+    private final int maxHistorySize;
 
     public ChatBot(LLMPropertiesConfigManager configManager) {
         this.configManager = configManager;
         this.conversationHistory = new ArrayList<>();
         this.gson = new Gson();
         this.currentProviderPrefix = "siliconflow"; // 默认提供商
+        try {
+            this.historyStorage = new FileConversationStorage("data");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        this.sessionId = "admin";
+        this.maxHistorySize = 3;
+    }
+
+    public ChatBot(LLMPropertiesConfigManager configManager,
+                   ConversationHistoryStorage historyStorage,
+                   String sessionId,
+                   int maxHistorySize) throws IOException {
+        this.configManager = configManager;
+        this.historyStorage = historyStorage;
+        this.sessionId = sessionId;
+        this.maxHistorySize = maxHistorySize;
+        this.gson = new Gson();
+        this.currentProviderPrefix = "siliconflow";
+
+        // 加载历史记录
+        this.conversationHistory = new ArrayList<>(historyStorage.loadConversation(sessionId));
     }
 
     // 设置当前使用的LLM提供商
@@ -48,6 +75,9 @@ public class ChatBot {
     public String sendMessage(String message, String model) throws IOException {
         addUserMessageToHistory(message);
 
+        // 检查并修剪历史记录
+        checkAndTrimHistory();
+
         // 从配置管理器获取当前提供商的配置
         String apiUrl = configManager.getApiUrl(currentProviderPrefix);
         String apiKey = configManager.getApiKey(currentProviderPrefix);
@@ -67,8 +97,14 @@ public class ChatBot {
         }
 
         // 发送请求并处理响应
-        String response = sendRequest(apiUrl, apiKey, payload);
-        return processResponse(response, currentProviderPrefix);
+        String rawResponse = sendRequest(apiUrl, apiKey, payload);
+
+        String response = processResponse(rawResponse, currentProviderPrefix);
+
+        // 保存更新后的历史记录
+        historyStorage.saveConversation(sessionId, conversationHistory);
+
+        return response;
     }
 
     private JsonObject createPayload(String model, Map<String, String> additionalParams) {
@@ -160,6 +196,25 @@ public class ChatBot {
         }
     }
 
+    private void checkAndTrimHistory() throws IOException {
+        if (conversationHistory.size() > maxHistorySize) {
+            // 保存当前历史到文件
+            historyStorage.saveConversation(sessionId + "_" + System.currentTimeMillis(),
+                    conversationHistory);
+
+            // 保留最近的N条消息
+            int keepSize = maxHistorySize / 2; // 保留一半
+            List<ChatMessage> recentHistory = new ArrayList<>(
+                    conversationHistory.subList(conversationHistory.size() - keepSize, conversationHistory.size())
+            );
+            conversationHistory.clear();
+            conversationHistory.addAll(recentHistory);
+
+            // 清理旧的历史文件
+            historyStorage.cleanupOldConversations(5); // 保留最近的5个历史文件
+        }
+    }
+
     public void clearConversationHistory() {
         conversationHistory.clear();
     }
@@ -167,4 +222,6 @@ public class ChatBot {
     public List<ChatMessage> getConversationHistory() {
         return Collections.unmodifiableList(conversationHistory);
     }
+
+    //c
 }
