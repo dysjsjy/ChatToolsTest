@@ -1,16 +1,20 @@
 package com.dysjsjy.ChatToolsTest.test;
 
+import com.dysjsjy.ChatToolsTest.test.LLMConfig.LLMPropertiesConfigManager;
+
 import java.io.IOException;
 import java.util.Scanner;
-import java.io.*;
+
 
 public class Main {
 
-    private SystemInit systemInit;
+    private LLMPropertiesConfigManager lpcm;
+    private ChatBot chatBot;
     private Scanner scanner;
 
     public Main() {
-        systemInit = new SystemInit();
+        this.lpcm = LLMPropertiesConfigManager.getInstance();
+        chatBot = new ChatBot(this.lpcm);
         scanner = new Scanner(System.in);
     }
 
@@ -42,7 +46,8 @@ public class Main {
                     useChatAPI();
                     break;
                 case "3":
-                    processImage();
+                    System.out.println("processImage");
+//                    processImage();
                     break;
                 case "4":
                     System.out.println("再见！");
@@ -79,33 +84,40 @@ public class Main {
     }
 
     private void useLocalOllama() {
-        ChatBot chatBot = new ChatBot();
+        chatBot.setProvider("ollama");
         String model = "qwen-2.5-1.5B-Instruct";
         startChatService("本地Ollama聊天服务", model, (input, m) -> chatBot.sendMessage(input, m));
     }
 
     private void useChatAPI() {
-        ChatBot chatBot = new ChatBot();
+        chatBot.setProvider("siliconflow");
         String model = "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B";
-        startChatService("ChatAPI", model, (input, m) -> chatBot.sendMessageToDeepSeek(input, m));
+        startChatService("ChatAPI", model, (input, m) -> chatBot.sendMessage(input, m));
     }
 
-    private void processImage() {
-        System.out.print("请输入图片文件路径: ");
-        String imagePath = scanner.nextLine();
-
-        try {
-            File imageFile = new File(imagePath);
-            if (!imageFile.exists()) {
-                System.out.println("错误: 图片文件不存在！");
-                return;
-            }
-
-            ImageProcessor imageProcessor = new ImageProcessor(systemInit.getChatAPIUrl(), systemInit.getApiKey());
-            String description = imageProcessor.uploadAndDescribeImage(imageFile);
-            System.out.println("图片描述: " + description);
-        } catch (IOException e) {
-            System.out.println("错误: 图片处理失败 - " + e.getMessage());
-        }
+    private void showAvailableProviders() {
+        System.out.println("Available providers:");
+        chatBot.getAvailableProviders().forEach((prefix, name) -> {
+            System.out.println("- " + name + " (" + prefix + ")");
+        });
     }
+
+//    private void processImage() {
+//        System.out.print("请输入图片文件路径: ");
+//        String imagePath = scanner.nextLine();
+//
+//        try {
+//            File imageFile = new File(imagePath);
+//            if (!imageFile.exists()) {
+//                System.out.println("错误: 图片文件不存在！");
+//                return;
+//            }
+//
+//            ImageProcessor imageProcessor = new ImageProcessor(systemInit.getChatAPIUrl(), systemInit.getApiKey());
+//            String description = imageProcessor.uploadAndDescribeImage(imageFile);
+//            System.out.println("图片描述: " + description);
+//        } catch (IOException e) {
+//            System.out.println("错误: 图片处理失败 - " + e.getMessage());
+//        }
+//    }
 }
