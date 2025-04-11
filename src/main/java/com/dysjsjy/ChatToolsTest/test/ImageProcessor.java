@@ -5,6 +5,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Base64;
 
+
+// todo 图片处理还在测试中
 public class ImageProcessor {
     private String apiUrl;
     private String apiKey;

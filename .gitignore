@@ -177,4 +177,5 @@ logs/
 Thumbs.db
 
 # data
-data
+data/db/config.properties
+data/history/

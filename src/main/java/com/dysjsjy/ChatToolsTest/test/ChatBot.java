@@ -1,32 +1,71 @@
 package com.dysjsjy.ChatToolsTest.test;
 
+import com.dysjsjy.ChatToolsTest.test.LLMConfig.LLMPropertiesConfigManager;
+import com.dysjsjy.ChatToolsTest.test.db.ConversationHistoryStorage;
+import com.dysjsjy.ChatToolsTest.test.db.FileConversationStorage;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonSyntaxException;
 
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+
 
 public class ChatBot {
-    private String apiUrl;
-    private String chatAPIUrl;
-    private String apiKey;
-    private List<ChatMessage> conversationHistory;
-    private Gson gson;
+    private final LLMPropertiesConfigManager configManager;
+    private final List<ChatMessage> conversationHistory;
+    private final Gson gson;
+    private String currentProviderPrefix;
+    private final ConversationHistoryStorage historyStorage;
+    private final String sessionId;
+    private final int maxHistorySize;
 
-    {
-        SystemInit systemInit = new SystemInit();
-        this.apiUrl = systemInit.getApiUrl();
-        this.apiKey = systemInit.getApiKey();
-        this.chatAPIUrl = systemInit.getChatAPIUrl();
-        this.apiUrl = systemInit.getChatAPIUrl();
+    public ChatBot(LLMPropertiesConfigManager configManager) {
+        this.configManager = configManager;
         this.conversationHistory = new ArrayList<>();
         this.gson = new Gson();
+        this.currentProviderPrefix = "siliconflow"; // 默认提供商
+        try {
+            this.historyStorage = new FileConversationStorage("data");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        this.sessionId = "admin";
+        this.maxHistorySize = 3;
     }
 
-    public ChatBot() {
+    public ChatBot(LLMPropertiesConfigManager configManager,
+                   ConversationHistoryStorage historyStorage,
+                   String sessionId,
+                   int maxHistorySize) throws IOException {
+        this.configManager = configManager;
+        this.historyStorage = historyStorage;
+        this.sessionId = sessionId;
+        this.maxHistorySize = maxHistorySize;
+        this.gson = new Gson();
+        this.currentProviderPrefix = "siliconflow";
+
+        // 加载历史记录
+        this.conversationHistory = new ArrayList<>(historyStorage.loadConversation(sessionId));
+    }
+
+    // 设置当前使用的LLM提供商
+    public void setProvider(String providerPrefix) {
+        if (configManager.getProviderNames().containsKey(providerPrefix)) {
+            this.currentProviderPrefix = providerPrefix;
+        } else {
+            throw new IllegalArgumentException("Unknown provider: " + providerPrefix);
+        }
+    }
+
+    // 获取当前可用的提供商列表
+    public Map<String, String> getAvailableProviders() {
+        return configManager.getProviderNames();
     }
 
     private void addUserMessageToHistory(String message) {
@@ -35,26 +74,67 @@ public class ChatBot {
 
     public String sendMessage(String message, String model) throws IOException {
         addUserMessageToHistory(message);
-        return sendRequest(apiUrl, model, null);
-    }
 
-    public String sendMessageToDeepSeek(String message, String model) throws IOException {
-        addUserMessageToHistory(message);
-        return processDeepSeekResponse(sendRequest(chatAPIUrl, model, apiKey));
-    }
+        // 检查并修剪历史记录
+        checkAndTrimHistory();
 
-    private String sendRequest(String apiUrl, String model, String apiKey) throws IOException {
+        // 从配置管理器获取当前提供商的配置
+        String apiUrl = configManager.getApiUrl(currentProviderPrefix);
+        String apiKey = configManager.getApiKey(currentProviderPrefix);
+        Map<String, String> additionalParams = configManager.getAdditionalParams(currentProviderPrefix);
+
         // 构造请求对象
+        JsonObject payload = createPayload(model, additionalParams);
+
+        // 构建真正的apiUrl
+        switch (currentProviderPrefix) {
+            case "ollama":
+                break;
+            case "siliconflow":
+                apiUrl += "/chat/completions";
+                break;
+            default: // OpenAI 和其他兼容API
+        }
+
+        // 发送请求并处理响应
+        String rawResponse = sendRequest(apiUrl, apiKey, payload);
+
+        String response = processResponse(rawResponse, currentProviderPrefix);
+
+        // 保存更新后的历史记录
+        historyStorage.saveConversation(sessionId, conversationHistory);
+
+        return response;
+    }
+
+    private JsonObject createPayload(String model, Map<String, String> additionalParams) {
         JsonObject payload = new JsonObject();
         payload.addProperty("model", model);
         payload.add("messages", gson.toJsonTree(conversationHistory));
         payload.addProperty("stream", false);
 
+        // todo 对额外参数部分优化
+//        for (Map.Entry<String, String> entry : additionalParams.entrySet()) {
+//            try {
+//                // 尝试解析为数字
+//                payload.addProperty(entry.getKey(), Double.parseDouble(entry.getValue()));
+//            } catch (NumberFormatException e) {
+//                // 不是数字，作为字符串添加
+//                payload.addProperty(entry.getKey(), entry.getValue());
+//            }
+//        }
+
+        return payload;
+    }
+
+    private String sendRequest(String apiUrl, String apiKey, JsonObject payload) throws IOException {
         // 创建HTTP连接
-        URL url = new URL(apiUrl + (apiKey == null ? "/api/chat" : "/chat/completions"));
+        URL url = new URL(apiUrl);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
-        if (apiKey != null) {
+
+        // 设置请求头
+        if (apiKey != null && !apiKey.isEmpty()) {
             conn.setRequestProperty("Authorization", "Bearer " + apiKey);
         }
         conn.setRequestProperty("Content-Type", "application/json");
@@ -66,87 +146,82 @@ public class ChatBot {
             os.write(input, 0, input.length);
         }
 
-        // 获得响应
+        // 获取响应
         return readResponse(conn);
     }
 
     private String readResponse(HttpURLConnection conn) throws IOException {
-        // 检查服务器响应头的字符编码
-        String contentType = conn.getContentType();
-        String charset = "UTF-8";
-        if (contentType != null) {
-            for (String param : contentType.replace(" ", "").split(";")) {
-                if (param.startsWith("charset=")) {
-                    charset = param.split("=", 2)[1];
-                    break;
-                }
-            }
-        }
-
         StringBuilder response = new StringBuilder();
         try (BufferedReader br = new BufferedReader(
-                new InputStreamReader(conn.getInputStream(), charset)
-        )) {
+                new InputStreamReader(conn.getInputStream(), "UTF-8"))) {
             String responseLine;
             while ((responseLine = br.readLine()) != null) {
                 response.append(responseLine.trim());
             }
-        } catch (UnsupportedEncodingException e) {
-            System.err.println("不支持的字符编码: " + charset);
-            e.printStackTrace();
-        } catch (IOException e) {
-            System.err.println("读取响应时出错: " + e.getMessage());
-            e.printStackTrace();
+        } finally {
+            conn.disconnect();
         }
-
-        conn.disconnect();
         return response.toString();
     }
 
-    private String processResponse(String response) {
-        // 使用Gson解析响应
-        JsonObject responseJson = gson.fromJson(response, JsonObject.class);
-        String assistantMessage = responseJson.getAsJsonObject("message")
-                .get("content")
-                .getAsString();
+    private String processResponse(String response, String providerPrefix) {
+        try {
+            JsonObject responseJson = gson.fromJson(response, JsonObject.class);
+            String assistantMessage;
 
-        conversationHistory.add(new ChatMessage("assistant", assistantMessage));
-        return assistantMessage;
+            // 根据不同提供商处理响应
+            switch (providerPrefix) {
+                case "ollama":
+                    assistantMessage = responseJson.getAsJsonArray("content")
+                            .get(0).getAsJsonObject()
+                            .get("text").getAsString();
+                    break;
+                case "siliconflow":
+                    assistantMessage = responseJson.getAsJsonArray("choices")
+                            .get(0).getAsJsonObject()
+                            .getAsJsonObject("message")
+                            .get("content").getAsString();
+                    break;
+                default: // OpenAI 和其他兼容API
+                    assistantMessage = responseJson.getAsJsonArray("choices")
+                            .get(0).getAsJsonObject()
+                            .getAsJsonObject("message")
+                            .get("content").getAsString();
+            }
+
+            conversationHistory.add(new ChatMessage("assistant", assistantMessage));
+            return assistantMessage;
+        } catch (JsonSyntaxException | NullPointerException e) {
+            throw new RuntimeException("Failed to parse response from " + providerPrefix + ": " + response, e);
+        }
     }
 
-    private String processDeepSeekResponse(String response) {
-        // 使用Gson解析响应
-        JsonObject responseJson = gson.fromJson(response, JsonObject.class);
-        // 获取 choices 数组的第一个元素
-        JsonObject firstChoice = responseJson.getAsJsonArray("choices")
-                .get(0)
-                .getAsJsonObject();
-        // 获取 assistantMessage 对象
-        String assistantMessage = firstChoice.getAsJsonObject("message")
-                .get("content")
-                .getAsString();
+    private void checkAndTrimHistory() throws IOException {
+        if (conversationHistory.size() > maxHistorySize) {
+            // 保存当前历史到文件
+            historyStorage.saveConversation(sessionId + "_" + System.currentTimeMillis(),
+                    conversationHistory);
 
-        conversationHistory.add(new ChatMessage("assistant", assistantMessage));
-        return assistantMessage;
+            // 保留最近的N条消息
+            int keepSize = maxHistorySize / 2; // 保留一半
+            List<ChatMessage> recentHistory = new ArrayList<>(
+                    conversationHistory.subList(conversationHistory.size() - keepSize, conversationHistory.size())
+            );
+            conversationHistory.clear();
+            conversationHistory.addAll(recentHistory);
+
+            // 清理旧的历史文件
+            historyStorage.cleanupOldConversations(5); // 保留最近的5个历史文件
+        }
     }
 
-    public String sendMessageToChatGPT(String input) {
-        String assistantMessage = "测试中。";
-        return assistantMessage;
+    public void clearConversationHistory() {
+        conversationHistory.clear();
     }
 
-    public List<ChatMessage> getHistory() {
-        return conversationHistory;
+    public List<ChatMessage> getConversationHistory() {
+        return Collections.unmodifiableList(conversationHistory);
     }
 
-//    public static void main(String[] args) {
-//        ChatBot chatBot = new ChatBot();
-//        String s = null;
-//        try {
-//            s = chatBot.sendMessageToDeepSeek("你好你是谁", "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B");
-//        } catch (IOException e) {
-//            throw new RuntimeException(e);
-//        }
-//        System.out.println(s);
-//    }
+    //c
 }
