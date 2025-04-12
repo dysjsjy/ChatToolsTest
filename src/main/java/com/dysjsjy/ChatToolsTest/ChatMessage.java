@@ -1,4 +1,4 @@
-package com.dysjsjy.ChatToolsTest.test;
+package com.dysjsjy.ChatToolsTest;
 
 public class ChatMessage {
     String role;

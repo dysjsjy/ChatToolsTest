@@ -1,6 +1,6 @@
-package com.dysjsjy.ChatToolsTest.test.db;
+package com.dysjsjy.ChatToolsTest.db;
 
-import com.dysjsjy.ChatToolsTest.test.ChatMessage;
+import com.dysjsjy.ChatToolsTest.ChatMessage;
 
 import java.io.IOException;
 import java.util.List;

@@ -1,6 +1,6 @@
-package com.dysjsjy.ChatToolsTest.test;
+package com.dysjsjy.ChatToolsTest;
 
-import com.dysjsjy.ChatToolsTest.test.LLMConfig.LLMPropertiesConfigManager;
+import com.dysjsjy.ChatToolsTest.LLMConfig.LLMPropertiesConfigManager;
 
 import java.io.IOException;
 import java.util.Scanner;

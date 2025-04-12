@@ -1,8 +1,8 @@
-package com.dysjsjy.ChatToolsTest.test;
+package com.dysjsjy.ChatToolsTest;
 
-import com.dysjsjy.ChatToolsTest.test.LLMConfig.LLMPropertiesConfigManager;
-import com.dysjsjy.ChatToolsTest.test.db.ConversationHistoryStorage;
-import com.dysjsjy.ChatToolsTest.test.db.FileConversationStorage;
+import com.dysjsjy.ChatToolsTest.LLMConfig.LLMPropertiesConfigManager;
+import com.dysjsjy.ChatToolsTest.db.ConversationHistoryStorage;
+import com.dysjsjy.ChatToolsTest.db.FileConversationStorage;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;

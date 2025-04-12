@@ -1,4 +1,4 @@
-package com.dysjsjy.ChatToolsTest.test.db;
+package com.dysjsjy.ChatToolsTest.db;
 
 import java.io.*;
 import java.nio.file.*;
@@ -6,7 +6,7 @@ import java.util.*;
 import com.google.gson.*;
 import com.google.gson.stream.JsonWriter;
 
-import com.dysjsjy.ChatToolsTest.test.ChatMessage;
+import com.dysjsjy.ChatToolsTest.ChatMessage;
 
 
 public class FileConversationStorage implements ConversationHistoryStorage {

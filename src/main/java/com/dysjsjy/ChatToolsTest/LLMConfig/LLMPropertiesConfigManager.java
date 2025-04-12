@@ -1,4 +1,4 @@
-package com.dysjsjy.ChatToolsTest.test.LLMConfig;
+package com.dysjsjy.ChatToolsTest.LLMConfig;
 
 import java.io.FileInputStream;
 import java.io.IOException;
